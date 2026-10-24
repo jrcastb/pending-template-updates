@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn -f pending-updates-core/pom.xml:*)",
+      "Bash(mvn -v)",
+      "Bash(java -version)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
