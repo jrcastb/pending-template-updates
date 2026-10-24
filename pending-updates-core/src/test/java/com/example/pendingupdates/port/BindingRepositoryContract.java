@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.pendingupdates.domain.BindingSnapshot;
 import com.example.pendingupdates.domain.BindingSnapshot.Cause;
+import com.example.pendingupdates.domain.BindingUpdate.Created;
 import com.example.pendingupdates.domain.BindingUpdate.Ignored;
 import com.example.pendingupdates.domain.EngagementBinding;
+import com.example.pendingupdates.domain.EngagementBinding.RejectedSnapshot;
 import com.example.pendingupdates.domain.EngagementId;
 import com.example.pendingupdates.domain.FirmId;
 import com.example.pendingupdates.domain.FirmScope;
@@ -18,8 +20,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Behaviour every {@link BindingRepository} adapter must satisfy. Proves the port contract only;
- * database-level isolation (Postgres RLS) needs its own integration test.
+ * Behaviour every {@link BindingRepository} adapter must satisfy: it stores the domain's decision
+ * as one read-decide-write, and it isolates firms. The decision rules themselves are tested in
+ * {@code EngagementBindingTest}. Proves the port contract only; database-level isolation (Postgres
+ * RLS) and concurrent writers need their own integration tests.
  */
 public abstract class BindingRepositoryContract {
 
@@ -40,17 +44,33 @@ public abstract class BindingRepositoryContract {
     }
 
     @Test
-    void staleUpsertIsIgnored() {
+    void upsertStoresWhatTheDomainDecides() {
         // given
-        repository.upsertIfNewer(SCOPE_A, snapshot(FIRM_A, ENG_1, AUDIT, 2, 3));
+        var first = repository.upsertIfNewer(SCOPE_A, snapshot(FIRM_A, ENG_1, AUDIT, 2, 3));
 
-        // when
-        var update = repository.upsertIfNewer(SCOPE_A, snapshot(FIRM_A, ENG_1, AUDIT, 1, 2));
+        // when a stale snapshot follows
+        var second = repository.upsertIfNewer(SCOPE_A, snapshot(FIRM_A, ENG_1, AUDIT, 1, 2));
 
-        // then
-        assertThat(update).isEqualTo(new Ignored(Ignored.Reason.STALE));
+        // then the created row is kept
+        assertThat(first).isInstanceOf(Created.class);
+        assertThat(second).isEqualTo(new Ignored(Ignored.Reason.STALE));
         assertThat(repository.find(SCOPE_A, ENG_1)).map(EngagementBinding::applied)
                 .contains(new Version(3));
+    }
+
+    @Test
+    void rejectedSnapshotLeavesTheRowUnchanged() {
+        // given
+        repository.upsertIfNewer(SCOPE_A, snapshot(FIRM_A, ENG_1, AUDIT, 1, 2));
+
+        // when the same revision arrives with different content
+        assertThatThrownBy(() ->
+                repository.upsertIfNewer(SCOPE_A, snapshot(FIRM_A, ENG_1, AUDIT, 1, 5)))
+                .isInstanceOf(RejectedSnapshot.class);
+
+        // then
+        assertThat(repository.find(SCOPE_A, ENG_1)).map(EngagementBinding::applied)
+                .contains(new Version(2));
     }
 
     @Test

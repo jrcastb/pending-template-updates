@@ -57,7 +57,7 @@ behaviour changes before phase 4.
 
 | Phase | What turns on | Exit check |
 |---|---|---|
-| 1 Hooks dark | Publish and snapshot hooks emit; consumers fill bindings and the latest table. No UI. | Events arrive for every enabled firm. |
+| 1 Hooks dark | Publish and snapshot hooks emit; consumers fill bindings and the latest table. | Events arrive for every enabled firm. |
 | 2 Backfill | Each existing engagement is loaded once to emit its snapshot. | Coverage gauge is complete. |
 | 3 Shadow | Status and affected counts are computed, not shown, and checked against audit loads. | Audit sample matches. |
 | 4 Enable per region | Status and summaries are shown, one region at a time. | Silent-firm and freshness alarms stay quiet. |
@@ -75,7 +75,7 @@ Earlier declines carry no version, so they backfill as "no decline" and are offe
 | Level | What it proves |
 |---|---|
 | Domain unit (slice) | The pending rule, table-driven; snapshots in any order, duplicates, conflicting revisions, decline normalization. |
-| Port contract (slice) | Idempotent upsert and firm isolation at the port. Every adapter runs the same suite. |
+| Port contract (slice) | Atomic read-decide-write and firm isolation at the port. Every adapter runs the same suite. |
 | RLS integration (Testcontainers) | Database isolation: a session scoped to one firm cannot read or write another firm's rows. |
 | Event contract, with the engagement-system team | The snapshot schema and a monotonic revision per engagement (A1). |
 | Shadow mode | The projection matches loaded engagements on real data. |
@@ -83,7 +83,7 @@ Earlier declines carry no version, so they backfill as "no decline" and are offe
 
 The slice in `pending-updates-core/` proves the contracts: ordering, idempotency, the cumulative
 offer and isolation at the port. Database isolation is a separate claim, proven only by the RLS
-integration test. All tests are deterministic, with no clock and no network.
+integration test.
 
 ## 4 Evaluation & Observability
 
@@ -98,7 +98,8 @@ leave the firm.
 even 0/0. An enabled firm that does not report raises a silent-firm alarm. Lag is the producer's
 outbox position against each firm consumer's position, so a quiet firm is not a false alarm.
 Backfill coverage is a gauge per firm. A small scheduled audit sample loads engagements and
-compares them with the projection.
+compares them with the projection. Decline normalizations are counted: a rising count means the
+producer is not clearing declines.
 
 **A firm's decision history.** An append-only log in the firm's database: engagement, offer,
 apply or decline, user, time, summary ID and a hash of the text the user saw. The hash ties

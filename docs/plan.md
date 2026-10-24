@@ -57,10 +57,11 @@ test list. Steps 2–6 are test-first; pause for "continue" after each one, and 
   `TemplateId` are ID records. `FirmScope` holds a `FirmId`.
 - **`BindingSnapshot`** is the event. It carries firm, engagement, template, `applied`,
   `lastDeclined`, `revision` and the cause.
-- **`EngagementBinding.applyIfNewer(snapshot)`** returns a sealed `BindingUpdate`:
-    - `Changed(binding)`
+- **`EngagementBinding.applyIfNewer(Optional<current>, snapshot)`**, a pure function (adapters
+  only persist its result atomically), returns a sealed `BindingUpdate`:
+    - `Created(binding)` or `Changed(binding)`
     - `Ignored(DUPLICATE | STALE)`
-    - It throws on a conflicting revision or a template mismatch.
+    - It throws a `RejectedSnapshot` (conflicting revision or template mismatch): DLQ in production.
 - **`PendingRule.evaluate(Optional<binding>, Optional<latest>)`** returns a sealed `PendingStatus`:
     - `UpdateAvailable(from, to, includesDeclinedVersions)`
     - `UpToDate`

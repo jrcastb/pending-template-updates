@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.pendingupdates.domain.BindingSnapshot.Cause;
 import com.example.pendingupdates.domain.BindingUpdate.Changed;
+import com.example.pendingupdates.domain.BindingUpdate.Created;
 import com.example.pendingupdates.domain.BindingUpdate.Ignored;
 import com.example.pendingupdates.domain.EngagementBinding.ConflictingRevision;
+import com.example.pendingupdates.domain.EngagementBinding.RejectedSnapshot;
 import com.example.pendingupdates.domain.EngagementBinding.TemplateMismatch;
 import java.util.List;
 import java.util.Optional;
@@ -23,54 +25,50 @@ class EngagementBindingTest {
 
     @Test
     void firstSnapshotCreatesTheBinding() {
-        EngagementBinding binding = EngagementBinding.from(created);
+        BindingUpdate update = EngagementBinding.applyIfNewer(Optional.empty(), created);
 
-        assertThat(binding.applied()).isEqualTo(new Version(2));
-        assertThat(binding.lastDeclined()).isEmpty();
-        assertThat(binding.revision()).isEqualTo(1L);
+        assertThat(update).isEqualTo(new Created(EngagementBinding.from(created)));
     }
 
     @Test
     void newerRevisionReplacesTheBinding() {
-        EngagementBinding binding = EngagementBinding.from(created);
+        BindingUpdate update = EngagementBinding.applyIfNewer(stored(created), applied);
 
-        assertThat(binding.applyIfNewer(applied)).isEqualTo(new Changed(EngagementBinding.from(applied)));
+        assertThat(update).isEqualTo(new Changed(EngagementBinding.from(applied)));
     }
 
     @Test
     void identicalRedeliveryIsIgnoredAsDuplicate() {
-        EngagementBinding binding = EngagementBinding.from(applied);
-
-        assertThat(binding.applyIfNewer(applied)).isEqualTo(new Ignored(Ignored.Reason.DUPLICATE));
+        assertThat(EngagementBinding.applyIfNewer(stored(applied), applied))
+                .isEqualTo(new Ignored(Ignored.Reason.DUPLICATE));
     }
 
     @Test
     void olderRevisionIsIgnoredAsStale() {
-        EngagementBinding binding = EngagementBinding.from(applied);
-
-        assertThat(binding.applyIfNewer(created)).isEqualTo(new Ignored(Ignored.Reason.STALE));
+        assertThat(EngagementBinding.applyIfNewer(stored(applied), created))
+                .isEqualTo(new Ignored(Ignored.Reason.STALE));
     }
 
     @Test
-    void sameRevisionWithDifferentContentIsAProducerBug() {
-        EngagementBinding binding = EngagementBinding.from(applied);
+    void sameRevisionWithDifferentContentIsRejected() {
         BindingSnapshot conflicting = snapshot(2, Cause.APPLIED, 4, NONE);
 
-        assertThatThrownBy(() -> binding.applyIfNewer(conflicting))
-                .isInstanceOf(ConflictingRevision.class);
+        assertThatThrownBy(() -> EngagementBinding.applyIfNewer(stored(applied), conflicting))
+                .isInstanceOf(ConflictingRevision.class)
+                .isInstanceOf(RejectedSnapshot.class);
     }
 
     @Test
     void lateApplyAfterANewerDeclineKeepsTheDecline() {
         // given the decline (rev 3) arrived before the apply (rev 2)
-        EngagementBinding binding = EngagementBinding.from(declined);
+        Optional<EngagementBinding> current = stored(declined);
 
         // when the older apply arrives late
-        BindingUpdate update = binding.applyIfNewer(applied);
+        BindingUpdate update = EngagementBinding.applyIfNewer(current, applied);
 
         // then it is ignored and the decline still stands
         assertThat(update).isEqualTo(new Ignored(Ignored.Reason.STALE));
-        assertThat(binding.lastDeclined()).contains(new Version(5));
+        assertThat(current.orElseThrow().lastDeclined()).contains(new Version(5));
     }
 
     @Test
@@ -82,7 +80,7 @@ class EngagementBindingTest {
                 List.of(declined, created, applied), List.of(declined, applied, created));
 
         for (List<BindingSnapshot> order : allOrders) {
-            assertThat(replay(order)).as("order %s", order).isEqualTo(expected);
+            assertThat(replay(order)).as("order %s", order).contains(expected);
         }
     }
 
@@ -94,23 +92,28 @@ class EngagementBindingTest {
 
     @Test
     void snapshotForAnotherTemplateIsRejected() {
-        EngagementBinding binding = EngagementBinding.from(created);
         BindingSnapshot otherTemplate = new BindingSnapshot(created.firmId(), created.engagementId(),
                 new TemplateId("review"), new Version(3), Optional.empty(), 2L, Cause.APPLIED);
 
-        assertThatThrownBy(() -> binding.applyIfNewer(otherTemplate))
-                .isInstanceOf(TemplateMismatch.class);
+        assertThatThrownBy(() -> EngagementBinding.applyIfNewer(stored(created), otherTemplate))
+                .isInstanceOf(TemplateMismatch.class)
+                .isInstanceOf(RejectedSnapshot.class);
     }
 
-    private static EngagementBinding replay(List<BindingSnapshot> order) {
-        EngagementBinding binding = EngagementBinding.from(order.get(0));
-        for (BindingSnapshot next : order.subList(1, order.size())) {
-            binding = switch (binding.applyIfNewer(next)) {
-                case Changed changed -> changed.binding();
-                case Ignored ignored -> binding;
+    private static Optional<EngagementBinding> replay(List<BindingSnapshot> order) {
+        Optional<EngagementBinding> current = Optional.empty();
+        for (BindingSnapshot next : order) {
+            current = switch (EngagementBinding.applyIfNewer(current, next)) {
+                case Created created -> Optional.of(created.binding());
+                case Changed changed -> Optional.of(changed.binding());
+                case Ignored ignored -> current;
             };
         }
-        return binding;
+        return current;
+    }
+
+    private static Optional<EngagementBinding> stored(BindingSnapshot snapshot) {
+        return Optional.of(EngagementBinding.from(snapshot));
     }
 
     private static BindingSnapshot snapshot(long revision, Cause cause, int applied, int declined) {

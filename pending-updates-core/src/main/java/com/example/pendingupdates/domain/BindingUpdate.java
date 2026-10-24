@@ -5,6 +5,14 @@ import java.util.Objects;
 /** Outcome of offering a snapshot to a binding. */
 public sealed interface BindingUpdate {
 
+    /** No binding was stored: the first snapshot creates it. */
+    record Created(EngagementBinding binding) implements BindingUpdate {
+
+        public Created {
+            Objects.requireNonNull(binding, "binding");
+        }
+    }
+
     record Changed(EngagementBinding binding) implements BindingUpdate {
 
         public Changed {

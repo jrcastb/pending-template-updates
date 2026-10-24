@@ -30,14 +30,13 @@ public final class InMemoryBindingRepository implements BindingRepository {
             throw new FirmMismatch();
         }
         BindingUpdate[] outcome = new BindingUpdate[1];
-        // compute() is atomic per key; an exception leaves the row unchanged.
+        // compute() is an atomic read-decide-write per key; an exception leaves the row unchanged.
         Map<EngagementId, EngagementBinding> rows =
                 rowsByFirm.computeIfAbsent(scope.firmId(), firm -> new ConcurrentHashMap<>());
         rows.compute(snapshot.engagementId(), (id, current) -> {
-            outcome[0] = current == null
-                    ? new BindingUpdate.Changed(EngagementBinding.from(snapshot))
-                    : current.applyIfNewer(snapshot);
+            outcome[0] = EngagementBinding.applyIfNewer(Optional.ofNullable(current), snapshot);
             return switch (outcome[0]) {
+                case BindingUpdate.Created created -> created.binding();
                 case BindingUpdate.Changed changed -> changed.binding();
                 case BindingUpdate.Ignored ignored -> current;
             };

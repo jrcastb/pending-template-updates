@@ -71,7 +71,8 @@ deliverable bigger without making it clearer.
   the highest revision wins. Deltas break when an older apply arrives after a newer decline. Same
   revision with different content is a producer bug: it throws in the slice; in production it goes
   to a DLQ with an alarm, not a consumer crash. A `lastDeclined <= applied` is normalized to "no
-  decline" (the producer may not have cleared an old decline); a metric counts normalizations.
+  decline" (the producer may not have cleared an old decline); a metric counts normalizations
+  (design doc only, not in the slice).
 - **Versions** are positive integers, monotonic per `templateId` (linear, no branches).
 - **Rule:** `pending = latest > max(applied, lastDeclined)`.
 - **Accumulated updates produce ONE cumulative offer**, `applied → latest`. It is flagged

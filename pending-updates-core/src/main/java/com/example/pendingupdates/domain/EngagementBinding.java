@@ -33,33 +33,51 @@ public record EngagementBinding(
     }
 
     /**
-     * Idempotent, order-independent update: only a higher revision changes the binding.
+     * Pure decision for one snapshot against the stored binding, if any. Idempotent and
+     * order-independent: only a higher revision changes the binding. Adapters persist the result
+     * atomically and hold no rules of their own.
      *
      * @throws TemplateMismatch if the snapshot names another template (assumption A3)
      * @throws ConflictingRevision if the same revision carries different content (producer bug)
      */
-    public BindingUpdate applyIfNewer(BindingSnapshot snapshot) {
-        if (!snapshot.firmId().equals(firmId) || !snapshot.engagementId().equals(engagementId)) {
+    public static BindingUpdate applyIfNewer(Optional<EngagementBinding> current,
+            BindingSnapshot snapshot) {
+        EngagementBinding candidate = from(snapshot);
+        if (current.isEmpty()) {
+            return new BindingUpdate.Created(candidate);
+        }
+        EngagementBinding stored = current.get();
+        if (!snapshot.firmId().equals(stored.firmId)
+                || !snapshot.engagementId().equals(stored.engagementId)) {
             throw new IllegalArgumentException("snapshot belongs to another engagement");
         }
-        if (!snapshot.templateId().equals(templateId)) {
-            throw new TemplateMismatch(templateId, snapshot.templateId());
+        if (!snapshot.templateId().equals(stored.templateId)) {
+            throw new TemplateMismatch(stored.templateId, snapshot.templateId());
         }
-        EngagementBinding candidate = from(snapshot);
-        if (snapshot.revision() > revision) {
+        if (snapshot.revision() > stored.revision) {
             return new BindingUpdate.Changed(candidate);
         }
-        if (snapshot.revision() < revision) {
+        if (snapshot.revision() < stored.revision) {
             return new BindingUpdate.Ignored(BindingUpdate.Ignored.Reason.STALE);
         }
-        if (!candidate.equals(this)) {
-            throw new ConflictingRevision(revision);
+        if (!candidate.equals(stored)) {
+            throw new ConflictingRevision(stored.revision);
         }
         return new BindingUpdate.Ignored(BindingUpdate.Ignored.Reason.DUPLICATE);
     }
 
-    /** Same revision, different content. In production: DLQ plus alarm, not a consumer crash. */
-    public static final class ConflictingRevision extends RuntimeException {
+    /** A producer bug, never retried. In production: DLQ plus alarm, not a consumer crash. */
+    public abstract static sealed class RejectedSnapshot extends RuntimeException
+            permits ConflictingRevision, TemplateMismatch {
+        private static final long serialVersionUID = 1L;
+
+        RejectedSnapshot(String message) {
+            super(message);
+        }
+    }
+
+    /** Same revision, different content. */
+    public static final class ConflictingRevision extends RejectedSnapshot {
         private static final long serialVersionUID = 1L;
 
         ConflictingRevision(long revision) {
@@ -67,8 +85,8 @@ public record EngagementBinding(
         }
     }
 
-    /** An engagement's template never changes (A3): a producer bug. In production: DLQ plus alarm. */
-    public static final class TemplateMismatch extends RuntimeException {
+    /** An engagement's template never changes (A3). */
+    public static final class TemplateMismatch extends RejectedSnapshot {
         private static final long serialVersionUID = 1L;
 
         TemplateMismatch(TemplateId expected, TemplateId actual) {
