@@ -36,8 +36,8 @@ per-event record is [AI_log.md](AI_log.md); this page is the summary.
 - **Residency.** It suggested residency for only some firms. The brief makes residency mandatory
   for every firm. (The shared regional database with a schema per firm came later, as my own
   decision; see the AI log.)
-- **Observability.** An "event-lag watermark" makes a quiet firm look broken. Lag is now producer
-  outbox position against consumer position, and every firm reports even 0/0.
+- **Observability.** An "event-lag watermark" makes a quiet firm look broken. Lag now compares each
+  firm's newest outbox event with the newest one applied, and every firm reports even 0/0.
 - **Product judgment.** It defaulted to a summary grouped by version. The primary view is the net
   diff, because that is what the user decides on.
 - **Data rules.** It proposed rejecting a snapshot with `lastDeclined <= applied`. That can be a
