@@ -26,7 +26,7 @@ template content is out of scope.
    Testing Strategy, Evaluation & Observability, Failure Modes & Tradeoffs.
 2. `pending-updates-core/`: one small slice of the system. Focus on interfaces, contracts and
    correctness, with tests. "This is not a full application build."
-3. Diagrams in `docs/diagrams/` (two at most: architecture and publish → visible indicator).
+3. Diagrams in `docs/diagrams.md`, as Mermaid (two at most: architecture and publish → visible indicator).
 4. `docs/AI_USAGE_NOTES.md`: where AI helped, where I corrected or ignored it, how I would guide
    other engineers, and where AI should not be trusted in this domain.
 

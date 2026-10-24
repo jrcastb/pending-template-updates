@@ -66,7 +66,7 @@ test list. Steps 2–6 are test-first; pause for "continue" after each one, and 
     - `UpToDate`
     - `Checking(NO_BINDING | LATEST_UNKNOWN | LATEST_BEHIND)`
 
-  `LATEST_BEHIND` means `applied > latest`: the latest-version table is lagging, so the rule
+  `LATEST_BEHIND` means `max(applied, lastDeclined) > latest`: the latest-version table is lagging, so the rule
   refuses to show "up to date" without evidence.
 
 ### Ports (contracts in Javadoc)
