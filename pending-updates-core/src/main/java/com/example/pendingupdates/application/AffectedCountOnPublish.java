@@ -15,8 +15,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Obs 1 and 2: on every publish, one firm reports how many of its engagements the new version
- * affects, and how many are still unknown. It always reports, even 0/0, so a missing report means
+ * Obs 1 and 2: on every publish, reports for one firm how many of its engagements the new version
+ * affects, and how many are still unknown; the job calls it once per enabled firm. It always reports, even 0/0, so a missing report means
  * a silent firm. Idempotent: a redelivered publish reports the same counts.
  */
 public final class AffectedCountOnPublish {

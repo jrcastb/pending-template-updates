@@ -143,7 +143,7 @@ record per template".
   assumption (A1) must be confirmed with the engagement-system team.
 - **Security:**
     - The isolation test proves the port contract, not database isolation. Database isolation is
-      proven by an integration test against Postgres RLS (Testcontainers).
+      proven by a per-firm role isolation test against Postgres (Testcontainers).
     - `FirmScope` is a plain record here; deriving it from the token happens at the edge.
 - **Checking counts:** an engagement with no binding counts as checking on every publish, because
   its template is unknown. This overstates checking until the backfill finishes, which is

@@ -59,14 +59,21 @@ deliverable bigger without making it clearer.
 
 - **Pending is derived on read, never stored per engagement.** A publish updates one record per
   template (`latestPublishedVersion`), not one row per engagement.
-- **Latest version per template** is template data, not firm data: one logical regional table
-  (e.g. a DynamoDB global table, replicated to each region), fed by publish events. Writes are
+- **Latest version per template** is template data, not firm data: one table per region, written
+  by the tracking service's event consumer from publish events on the regional queue. Writes are
   monotonic (max version), so duplicates and out-of-order events are harmless. A periodic resync
   from the template store repairs missed events, with a freshness metric per region. Status is
-  computed in the app: firm bindings (isolated) + regional latest table; no cross-region call.
+  computed in the Pending-updates API: firm bindings (isolated) + regional latest table; no
+  cross-region call for status.
 - **Per-engagement binding** (read model): `firmId`, `engagementId`, `templateId`,
   `appliedVersion`, `lastDeclinedVersion`, `revision`. It is captured from events the engagement
-  system emits when it already has the engagement loaded (create, open, apply, decline).
+  system emits through an outbox when it already has the engagement loaded (create, open, apply,
+  decline), delivered on a regional SQS queue to a multi-tenant tracking service.
+- **Engagement registry:** the firm's engagement ids, in the tracking DB, implementing
+  `EngagementDirectory`. Filled by snapshots (a snapshot above any tombstone registers an unknown
+  engagement) and by the backfill's one-time listing (A4), which skips tombstones. An archive event
+  removes the registry row and the binding and leaves a tombstone at that revision; snapshots at or
+  below it are ignored (design doc only).
 - **Binding events are full snapshots** (`applied`, `lastDeclined`, `revision`, cause), not deltas:
   the highest revision wins. Deltas break when an older apply arrives after a newer decline. Same
   revision with different content is a producer bug: it throws in the slice; in production it goes
@@ -92,22 +99,34 @@ deliverable bigger without making it clearer.
   change list rendered from the JSON diff is the authority. An optional LLM narrative (design doc
   only, not in the slice) may only restate cited change ids; if validation fails, only the list
   is shown.
-- **Firm isolation:** preferred: bindings and the decision log live in the firm's existing
-  customer-specific database, inheriting structural isolation and residency with no new store of
-  client data (to confirm with the owning team). Fallback: one shared database per residency
-  region with Postgres RLS (`FORCE ROW LEVEL SECURITY`, a non-owner role without `BYPASSRLS`,
-  `firm_id` from the token set via `SET LOCAL` per transaction). Residency is mandatory for every
-  firm through regional placement; a dedicated database is for very large firms, for performance
-  only. Every repository call requires a `FirmScope` derived from the authenticated token, never
-  from the request body. Viewing and deciding are separate permissions (design doc only, not in
-  the slice).
+- **Firm isolation:** bindings, the registry and the decision log live in a regional tracking
+  service (Aurora Postgres), one schema per firm, not in the firm's customer-specific database
+  (engagement storage is not queryable and belongs to another team). Each schema is owned by a
+  per-firm role; the service connects with a role that has no direct grants and can only assume
+  firm roles; every transaction runs `SET LOCAL ROLE` for the firm from the user's token, or from
+  the verified producer on event paths. Rejected: RLS on shared tables (simpler to operate, larger
+  blast radius). Residency is mandatory for every firm through regional placement.
+- **Producer trust:** the consumer accepts engagement events only from the engagement system's
+  role, which sets `firmId` from its own context, never from user input. The registry does not verify the
+  firm (a per-schema registry cannot see other firms, and out-of-order delivery would raise false
+  alarms). Rejected: a global `engagementId → firmId` table (a cross-firm structure).
+  `FirmMismatch` stays as the port's guard against code bugs (scope ≠ snapshot).
+- **FirmScope:** every repository call requires a `FirmScope` from the token or the verified
+  producer, never from a request body. Choosing the role is the one app-layer step (tested,
+  audited); what is structural is that one transaction reaches one firm's schema, no table mixes
+  firms, and a missing role switch fails closed. The latest-version table is read-only to firm
+  roles and written by a template-writer role. The Pending-updates API validates the forwarded
+  user token itself. Viewing and deciding are separate permissions (design doc only, not in the
+  slice).
 - **Observability:**
-    - Obs 1: on every publish, each firm consumer reports counts only (no engagement ids):
-      `affected` = bindings on that template with `max(applied, lastDeclined) < newVersion`, and
-      `checking` (unknown bindings) separately. It reports even when both are zero.
-    - Obs 2: that per-publish report is the heartbeat; a firm that does not report raises a
-      silent-firm alarm. Lag is producer outbox position vs. consumer position per firm, so a quiet
-      firm is not a false alarm. Backfill coverage is a gauge. A small daily audit-load sample
+    - Obs 1: on every publish, the affected-count job reports for every firm enabled in the
+      region, counts only (no engagement ids): `affected` = bindings on that template with
+      `max(applied, lastDeclined) < newVersion`, and `checking` (registered engagements with no
+      binding) separately. It reports even when both are zero. No routing index: a per-firm
+      `findByTemplate` is cheap at hundreds of engagements.
+    - Obs 2: that per-publish report is the heartbeat; an enabled firm that does not report raises
+      a silent-firm alarm. Lag is each firm's newest outbox event vs. the newest applied, plus the
+      queue's oldest-message age (SQS standard has no ordered per-firm position). Backfill coverage is a gauge. A small daily audit-load sample
       (projection vs. loaded engagement) is a correctness signal (design doc only).
 - **Decision log (Obs 3):** append-only, per firm. Each record stores the summary id and the hash
   of the text the user saw. Design doc only, not in the slice.

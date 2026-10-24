@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Reference adapter. Rows are partitioned per firm, mirroring one store per firm. */
+/** Reference adapter. Rows are partitioned per firm, mirroring one schema per firm. */
 public final class InMemoryBindingRepository implements BindingRepository {
 
     private final Map<FirmId, Map<EngagementId, EngagementBinding>> rowsByFirm =

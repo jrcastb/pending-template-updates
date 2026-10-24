@@ -33,8 +33,9 @@ per-event record is [AI_log.md](AI_log.md); this page is the summary.
 - **Over-engineering.** I started from a solution to a harder exercise and rejected most of it:
   adaptive limiter, permit quarantine, fairness scheduler, version DAG, cost model, and every number
   not in this brief. The brief says "do not over-optimize".
-- **Residency.** It suggested a shared database with residency only for some firms. The brief makes
-  residency mandatory, and firms already have customer-specific databases.
+- **Residency.** It suggested residency for only some firms. The brief makes residency mandatory
+  for every firm. (The shared regional database with a schema per firm came later, as my own
+  decision; see the AI log.)
 - **Observability.** An "event-lag watermark" makes a quiet firm look broken. Lag is now producer
   outbox position against consumer position, and every firm reports even 0/0.
 - **Product judgment.** It defaulted to a summary grouped by version. The primary view is the net
@@ -67,8 +68,8 @@ per-event record is [AI_log.md](AI_log.md); this page is the summary.
   restate changes it cites by ID, it fails closed to the list, and it is checked against a golden
   set with pinned model and prompt versions.
 - **Security and isolation claims.** AI will call a design "isolated" from code that only filters
-  in the application. Firm isolation must be structural, and only a database-level test (RLS or a
-  per-firm database) proves it.
+  in the application. Firm isolation must be structural, and only a database-level test (per-firm
+  roles) proves it.
 - **Facts about other teams' systems.** The revision ordering, `lastDeclined` storage and
   engagement listing (A1–A4) are assumptions that the AI cannot verify. They must be confirmed
   with the owning teams.

@@ -3,7 +3,7 @@
 One line per event: what the AI proposed, and what I did (accepted / corrected / rejected) and why.
 
 - Reused my Staff take-home solution as a reference, then **rejected** most of it for this brief: AIMD limiter, permit quarantine, fairness scheduler, version DAG, cost model and the numbers that are not in this brief. Reason: "do not over-optimize"; the brief is calibrated for this level.
-- **Corrected** an AI suggestion to place the binding store in a shared DB, offering "residency" only to some firms. The brief makes residency mandatory, and it already has customer-specific databases.
+- **Corrected** an AI suggestion that offered residency for only some firms. The brief makes residency mandatory for every firm. (The shared regional DB with a schema per firm came later, as my decision: see the "My decision" entry below.)
 - **Accepted, with refinements:** per-firm affected counts (Obs 1). Refinements: counts only, CHECKING counted separately, and every firm reports 0 so the report doubles as the silent-firm heartbeat.
 - **Corrected** the "event-lag watermark" idea. A quiet firm looks like a broken one, so lag is measured as producer outbox position vs. consumer position.
 - **Corrected** the default "summary grouped by version". The primary view is the net diff (what the user decides on); the per-version breakdown is secondary.
@@ -27,3 +27,7 @@ One line per event: what the AI proposed, and what I did (accepted / corrected /
     - **Adjusted:** the nested snapshot exceptions now share a sealed base type, `RejectedSnapshot`, so the "goes to the DLQ" contract is visible in code.
     - **Adjusted:** decline normalizations are not measured in the slice. DESIGN.md says they are counted (a rising count means the producer is not clearing declines), and CLAUDE.md marks it design doc only.
     - **Corrected:** the AI had put "the first snapshot creates the row" in the in-memory adapter. Business rules belong in the domain, not in the persistence adapter. One pure function, `applyIfNewer(Optional<current>, snapshot)`, now decides created / changed / duplicate / stale / rejected. The adapter only does the atomic read-decide-write, and the contract test covers atomicity and isolation only. Done test-first.
+- **My decision:** Moved bindings from the firm's existing database to a regional tracking service with a schema per firm. Reason: the brief says engagement storage is not directly queryable, and that database belongs to another team. Cost: a new store of client-derived data, which needs per-firm roles to be structural, plus producer verification.
+- AI flagged that a per-schema registry cannot detect a cross-firm event; trust moved to the producer's IAM identity.
+- AI found that archiving needs a tombstone, or a late snapshot recreates the binding.
+- Reviewer caught an overclaim ('the database denies cross-firm access') and a race between tombstones and backfill seeding.

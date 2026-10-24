@@ -7,7 +7,7 @@ import com.example.pendingupdates.port.EngagementDirectory;
 import java.util.List;
 import java.util.Map;
 
-/** Reference adapter with a fixed set of engagement IDs per firm. */
+/** Stands in for the registry; registration on snapshot is design-only. */
 public final class InMemoryEngagementDirectory implements EngagementDirectory {
 
     private final Map<FirmId, List<EngagementId>> idsByFirm;

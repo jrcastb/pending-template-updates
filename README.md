@@ -7,8 +7,9 @@ it, without any user-facing wait on the ~1-minute engagement load.
 **Central decision:** pending status is derived on read, never stored per engagement:
 `pending = latest > max(applied, lastDeclined)`.
 - A publish writes one record per template: its latest version.
-- Each firm keeps a small read model of its engagements' template bindings. It is fed by snapshot
-  events the engagement system emits while an engagement is already loaded.
+- Each firm keeps a small read model of its engagements' template bindings, in its own schema of
+  a regional tracking service. It is fed by snapshot events the engagement system emits while an
+  engagement is already loaded.
 - Only the one-time backfill of existing engagements pays the load.
 
 ## Deliverables
@@ -43,7 +44,7 @@ Pure Java, hexagonal layout, under `com.example.pendingupdates`:
 |---|---|
 | `domain` | The rules, with no I/O. `PendingRule` returns a sealed `PendingStatus`: `UpdateAvailable`, `UpToDate` or `Checking`. `EngagementBinding.applyIfNewer` is one pure function that decides how a snapshot changes a binding: created, changed, duplicate, stale or rejected. |
 | `port` | Contracts in Javadoc. `BindingRepository` (every call takes a `FirmScope`), `EngagementDirectory` and `AffectedCountSink`. |
-| `application` | `AffectedCountOnPublish`: on every publish, each firm reports its affected and checking counts. It reports even 0/0, so the report also works as a heartbeat. |
+| `application` | `AffectedCountOnPublish`: on every publish, it reports one firm's affected and checking counts; the job calls it once per enabled firm. It reports even 0/0, so the report also works as a heartbeat. |
 | `adapter.inmemory` | Reference adapters used by the tests. |
 
 What the tests prove:
@@ -55,7 +56,7 @@ What the tests prove:
 - **Affected counts.** Counts only, no engagement IDs, and a report even at 0/0.
 
 What the tests do not prove:
-- Database-level isolation. That needs an RLS integration test against Postgres (see Testing
-  Strategy in the design).
+- Database-level isolation. That needs a per-firm role isolation test against Postgres (see
+  Testing Strategy in the design).
 - Real AWS adapters, the summary pipeline, and the decision log. These are covered in the design
   only.

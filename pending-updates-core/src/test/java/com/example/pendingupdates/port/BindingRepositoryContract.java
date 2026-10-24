@@ -22,8 +22,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Behaviour every {@link BindingRepository} adapter must satisfy: it stores the domain's decision
  * as one read-decide-write, and it isolates firms. The decision rules themselves are tested in
- * {@code EngagementBindingTest}. Proves the port contract only; database-level isolation (Postgres
- * RLS) and concurrent writers need their own integration tests.
+ * {@code EngagementBindingTest}. Proves the port contract only; database-level isolation (per-firm
+ * roles) and concurrent writers need their own integration tests.
  */
 public abstract class BindingRepositoryContract {
 
