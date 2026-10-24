@@ -16,3 +16,4 @@ One line per event: what the AI proposed, and what I did (accepted / corrected /
   Lesson: check AI advice against the brief's exact wording, and ask what a test actually proves.
 - **Accepted** the switch to snapshot events. The AI found an ordering bug with delta events: an older Applied arriving after a newer Declined.
 - **Corrected** the AI's "reject snapshot when declined <= applied". It is now normalized to "no decline", because it can be a valid state if the producer didn't clear an old decline.
+- **Accepted** the AI's fix for a plan-order conflict: Step 3's `PendingRule.evaluate(Optional<binding>, …)` needed `EngagementBinding`, planned for Step 4. Chose a data-only binding record in Step 3, with behaviour in Step 4, over swapping the steps or changing the rule's signature. Reason: keeps the approved signature and step boundaries.

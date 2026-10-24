@@ -9,6 +9,10 @@ public record Version(int value) implements Comparable<Version> {
         }
     }
 
+    public boolean isNewerThan(Version other) {
+        return compareTo(other) > 0;
+    }
+
     @Override
     public int compareTo(Version other) {
         return Integer.compare(value, other.value);
